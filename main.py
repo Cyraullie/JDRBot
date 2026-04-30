@@ -1,8 +1,8 @@
+import os
 import discord
 from discord.ext import commands
 import yt_dlp
 import asyncio
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,105 +13,83 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-queues = {}  # file d’attente par serveur
+queues = {}
+current = {}
 
 YDL_OPTIONS = {
-    'format': 'bestaudio',
-    'quiet': True,
-    'default_search': 'ytsearch'
+    "format": "bestaudio/best",
+    "quiet": True,
+    "noplaylist": True,
+    "retries": 3
 }
 
 FFMPEG_OPTIONS = {
-    'options': '-vn'
+    "options": "-vn -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
 }
 
 
 async def play_next(ctx):
-    if queues.get(ctx.guild.id):
-        url = queues[ctx.guild.id].pop(0)
+    guild_id = ctx.guild.id
 
-        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            info = ydl.extract_info(url, download=False)
-            url2 = info['url']
-            title = info.get('title', 'Titre inconnu')
+    if queues.get(guild_id):
+        url = queues[guild_id].pop(0)
 
-        source = await discord.FFmpegOpusAudio.from_probe(url2, **FFMPEG_OPTIONS)
+        try:
+            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                info = ydl.extract_info(url, download=False)
+                stream = info["url"]
+                title = info.get("title")
 
-        ctx.voice_client.play(
-            source,
-            after=lambda e: asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
-        )
+            source = discord.FFmpegPCMAudio(stream, **FFMPEG_OPTIONS)
 
-        await ctx.send(f"🎶 Lecture : {title}")
+            def after(e):
+                asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
+
+            ctx.voice_client.play(source, after=after)
+            current[guild_id] = title
+
+            await ctx.send(f"🎶 {title}")
+
+        except Exception as e:
+            print("Erreur:", e)
+            await play_next(ctx)
+
     else:
         await ctx.voice_client.disconnect()
-
-
-@bot.event
-async def on_ready():
-    print(f"Connecté en tant que {bot.user}")
 
 
 @bot.command()
 async def play(ctx, *, search):
     if not ctx.author.voice:
-        await ctx.send("Tu dois être dans un salon vocal.")
-        return
-
-    channel = ctx.author.voice.channel
+        return await ctx.send("Tu dois être en vocal")
 
     if not ctx.voice_client:
-        await channel.connect()
+        await ctx.author.voice.channel.connect()
 
-    if ctx.guild.id not in queues:
-        queues[ctx.guild.id] = []
+    guild_id = ctx.guild.id
 
-    queues[ctx.guild.id].append(search)
+    queues.setdefault(guild_id, [])
+    queues[guild_id].append(search)
 
     if not ctx.voice_client.is_playing():
         await play_next(ctx)
     else:
-        await ctx.send(f"Ajouté à la queue : {search}")
+        await ctx.send("Ajouté à la queue")
 
 
 @bot.command()
 async def skip(ctx):
-    if ctx.voice_client:
-        ctx.voice_client.stop()
-        await ctx.send("⏭️ Skip !")
+    ctx.voice_client.stop()
 
 
 @bot.command()
 async def pause(ctx):
-    if ctx.voice_client:
-        ctx.voice_client.pause()
-        await ctx.send("⏸️ Pause")
+    ctx.voice_client.pause()
 
 
 @bot.command()
 async def resume(ctx):
-    if ctx.voice_client:
-        ctx.voice_client.resume()
-        await ctx.send("▶️ Reprise")
-
-
-@bot.command()
-async def stop(ctx):
-    if ctx.voice_client:
-        queues[ctx.guild.id] = []
-        await ctx.voice_client.disconnect()
-        await ctx.send("⏹️ Stop et déconnexion")
-
-
-@bot.command()
-async def queue(ctx):
-    q = queues.get(ctx.guild.id)
-
-    if not q:
-        await ctx.send("Queue vide.")
-    else:
-        msg = "\n".join([f"{i+1}. {song}" for i, song in enumerate(q)])
-        await ctx.send(f"📜 Queue:\n{msg}")
+    ctx.voice_client.resume()
 
 
 bot.run(TOKEN)
