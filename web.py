@@ -53,6 +53,14 @@ def loop(mode):
     return {"ok": True}
 
 
+@app.route("/queue/remove/<int:index>", methods=["POST"])
+def remove_from_queue(index):
+    for guild_id in shared.queues:
+        if 0 <= index < len(shared.queues[guild_id]):
+            shared.queues[guild_id].pop(index)
+            return {"ok": True}
+    return {"ok": False}
+
 # 🔥 PUSH LIVE DATA
 def emit_update():
     socketio.emit("update", {

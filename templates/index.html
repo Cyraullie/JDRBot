@@ -1,144 +1,178 @@
 <!DOCTYPE html>
 <html>
 <head>
-<title>🎧 Music Dashboard PRO Flask</title>
+    <title>🎶 Music Dashboard</title>
 
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        body {
+            background: #0f0f0f;
+            color: white;
+            font-family: Arial;
+            margin: 0;
+        }
 
-<style>
-body {
-    margin:0;
-    font-family: Arial;
-    background:#0b0b0f;
-    color:white;
-}
+        header {
+            background: #1db954;
+            padding: 20px;
+            text-align: center;
+            font-size: 24px;
+        }
 
-header {
-    text-align:center;
-    padding:20px;
-    color:#00ffcc;
-    font-size:22px;
-}
+        .container {
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+        }
 
-.container {
-    display:grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap:20px;
-    padding:20px;
-}
+        .left, .right {
+            flex: 1;
+        }
 
-.card {
-    background:#16161d;
-    border-radius:15px;
-    padding:15px;
-}
+        .card {
+            background: #181818;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
 
-img {
-    width:100%;
-    border-radius:10px;
-}
+        .now img {
+            width: 100%;
+            border-radius: 10px;
+        }
 
-button {
-    background:#00ffcc;
-    border:none;
-    padding:10px;
-    margin:5px;
-    border-radius:10px;
-    cursor:pointer;
-}
+        .title {
+            font-size: 20px;
+            margin-top: 10px;
+        }
 
-.queue-item {
-    display:flex;
-    gap:10px;
-    background:#0f0f14;
-    padding:8px;
-    margin-bottom:8px;
-    border-radius:10px;
-}
+        .controls button {
+            padding: 10px;
+            margin: 5px;
+            border: none;
+            border-radius: 6px;
+            background: #1db954;
+            color: white;
+            cursor: pointer;
+        }
 
-.queue-item img {
-    width:60px;
-    border-radius:8px;
-}
+        .queue-item {
+            display: flex;
+            align-items: center;
+            background: #222;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 10px;
+        }
 
-.small {
-    font-size:12px;
-    color:#aaa;
-}
-</style>
+        .queue-item img {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            margin-right: 10px;
+        }
+
+        .queue-info {
+            flex: 1;
+        }
+
+        .queue-title {
+            font-size: 14px;
+        }
+
+        .remove {
+            background: red;
+            border: none;
+            color: white;
+            padding: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body>
 
-<header>🎧 Discord Music Bot Dashboard</header>
+<header>🎶 Discord Music Dashboard</header>
 
 <div class="container">
 
-<div class="card">
-    <h3>Now Playing</h3>
-    <div id="now">Loading...</div>
-</div>
+    <!-- NOW PLAYING -->
+    <div class="left">
+        <div class="card now">
+            <h2>Now Playing</h2>
+            <img id="thumb" src="">
+            <div class="title" id="title">...</div>
+        </div>
 
-<div class="card">
-    <h3>Controls</h3>
-    <button onclick="send('pause')">⏸</button>
-    <button onclick="send('resume')">▶</button>
-    <button onclick="send('skip')">⏭</button>
-    <button onclick="send('loop/song')">🔁 Song</button>
-    <button onclick="send('loop/queue')">🔁 Queue</button>
-</div>
+        <div class="card controls">
+            <button onclick="control('pause')">⏸</button>
+            <button onclick="control('resume')">▶</button>
+            <button onclick="control('skip')">⏭</button>
+            <button onclick="control('loop/song')">🔁 Song</button>
+            <button onclick="control('loop/queue')">🔁 Queue</button>
+        </div>
+    </div>
 
-<div class="card">
-    <h3>Queue</h3>
-    <div id="queue"></div>
-</div>
+    <!-- QUEUE -->
+    <div class="right">
+        <div class="card">
+            <h2>Queue</h2>
+            <div id="queue"></div>
+        </div>
+    </div>
 
 </div>
 
 <script>
-
-const socket = io();
-
-socket.on("update", (data) => {
-    renderNow(data.current);
-    renderQueue(data.queue);
-});
-
-function renderNow(current){
-    let g = Object.keys(current || {})[0];
-    let song = current?.[g];
-
-    if(!song){
-        document.getElementById("now").innerHTML = "Rien";
-        return;
-    }
-
-    document.getElementById("now").innerHTML = `
-        <img src="${song.thumbnail}">
-        <h3>${song.title}</h3>
-        <div class="small">⏱ ${song.duration || 0}s</div>
-    `;
+function formatTime(sec){
+    if(!sec) return "0:00";
+    let m = Math.floor(sec / 60);
+    let s = sec % 60;
+    return m + ":" + (s < 10 ? "0"+s : s);
 }
 
-function renderQueue(queue){
+async function refresh(){
+    let now = await fetch('/now').then(r=>r.json());
+    let queue = await fetch('/queue').then(r=>r.json());
+
+    let guild = Object.keys(now)[0];
+
+    if(now[guild]){
+        document.getElementById("title").innerText = now[guild].title;
+        document.getElementById("thumb").src = now[guild].thumbnail;
+    }
+
     let html = "";
 
-    for(let g in queue){
-        queue[g].forEach(q => {
-            html += `
-            <div class="queue-item">
-                <div>${q}</div>
-            </div>`;
-        });
-    }
+    let q = queue[guild] || [];
 
-    document.getElementById("queue").innerHTML = html || "Vide";
+    q.forEach((track, i) => {
+        html += `
+        <div class="queue-item">
+            <img src="${track.thumbnail}">
+            <div class="queue-info">
+                <div class="queue-title">${track.title}</div>
+                <div>${formatTime(track.duration)}</div>
+            </div>
+            <button class="remove" onclick="remove(${i})">❌</button>
+        </div>
+        `;
+    });
+
+    document.getElementById("queue").innerHTML = html;
 }
 
-function send(action){
-    fetch("/"+action, {method:"POST"});
+async function control(action){
+    await fetch("/"+action, {method:"POST"});
 }
 
+async function remove(i){
+    await fetch("/queue/remove/"+i, {method:"POST"});
+    refresh();
+}
+
+setInterval(refresh, 2000);
+refresh();
 </script>
 
 </body>

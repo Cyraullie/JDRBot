@@ -63,7 +63,8 @@ async def play_next(ctx):
             # 🔁 LOOP QUEUE
             if shared.loop["queue"] and shared.history.get(guild_id):
                 shared.queues[guild_id] = shared.history[guild_id].copy()
-                search = shared.queues[guild_id].pop(0)
+                track = shared.queues[guild_id].pop(0)
+                search = track["url"]
             else:
                 return
 
@@ -87,7 +88,7 @@ async def play_next(ctx):
         "title": title,
         "source": search,
         "thumbnail": info.get("thumbnail"),
-        "duration": info.get("duration") or 0,
+        "duration": info.get("duration", 0),
         "url": info.get("webpage_url")
     }
 
@@ -117,7 +118,20 @@ async def play(ctx, *, search):
         await ctx.author.voice.channel.connect()
 
     guild_id = ctx.guild.id
-    shared.queues.setdefault(guild_id, []).append(search)
+    with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+        info = ydl.extract_info(search, download=False)
+
+        if "entries" in info:
+            info = info["entries"][0]
+
+    track = {
+        "title": info["title"],
+        "url": search,
+        "thumbnail": info.get("thumbnail"),
+        "duration": info.get("duration", 0)
+    }
+
+    shared.queues.setdefault(guild_id, []).append(track)
 
     if not ctx.voice_client.is_playing():
         await play_next(ctx)
