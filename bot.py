@@ -47,50 +47,56 @@ async def play_next(ctx):
     if ctx.voice_client is None:
         return
 
-    # 🎵 LOOP SONG
+    # 🔁 LOOP SONG
     if shared.loop["song"] and shared.current.get(guild_id):
-        search = shared.current[guild_id]["source"]
+        track = shared.current[guild_id]
 
     else:
         # queue normale
-        if shared.queues.get(guild_id) and len(shared.queues[guild_id]) > 0:
-            search = shared.queues[guild_id].pop(0)
+        if shared.queues.get(guild_id):
+            if len(shared.queues[guild_id]) > 0:
+                track = shared.queues[guild_id].pop(0)
 
-            # save history
-            shared.history.setdefault(guild_id, []).append(search)
+                # save history
+                shared.history.setdefault(guild_id, []).append(track)
 
+            else:
+                track = None
         else:
-            # 🔁 LOOP QUEUE
+            track = None
+
+        # 🔁 LOOP QUEUE
+        if not track:
             if shared.loop["queue"] and shared.history.get(guild_id):
                 shared.queues[guild_id] = shared.history[guild_id].copy()
                 track = shared.queues[guild_id].pop(0)
-                search = track["url"]
             else:
                 return
 
+    # 🎧 STREAM
     with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-        info = ydl.extract_info(search, download=False)
+        info = ydl.extract_info(track["url"], download=False)
 
         if "entries" in info:
             info = info["entries"][0]
 
         stream = info["url"]
-        title = info["title"]
 
     source = discord.FFmpegPCMAudio(stream, **FFMPEG_OPTIONS)
 
     def after(error):
-        asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
+        if error:
+            print("FFMPEG ERROR:", error)
+
+        asyncio.run_coroutine_threadsafe(
+            play_next(ctx),
+            bot.loop
+        )
 
     ctx.voice_client.play(source, after=after)
 
-    shared.current[guild_id] = {
-        "title": title,
-        "source": search,
-        "thumbnail": info.get("thumbnail"),
-        "duration": info.get("duration", 0),
-        "url": info.get("webpage_url")
-    }
+    # ✅ update current propre
+    shared.current[guild_id] = track
 
 
 # 🎛 LOOP COMMAND
@@ -124,12 +130,12 @@ async def play(ctx, *, search):
         if "entries" in info:
             info = info["entries"][0]
 
-    track = {
-        "title": info["title"],
-        "url": search,
-        "thumbnail": info.get("thumbnail"),
-        "duration": info.get("duration", 0)
-    }
+        track = {
+            "title": info["title"],
+            "url": info.get("webpage_url") or search,
+            "thumbnail": info.get("thumbnail"),
+            "duration": info.get("duration", 0)
+        }
 
     shared.queues.setdefault(guild_id, []).append(track)
 

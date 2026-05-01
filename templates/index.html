@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <title>🎶 Music Dashboard</title>
 
     <style>
@@ -124,6 +125,8 @@
 </div>
 
 <script>
+const socket = io();
+
 function formatTime(sec){
     if(!sec) return "0:00";
     let m = Math.floor(sec / 60);
@@ -131,9 +134,9 @@ function formatTime(sec){
     return m + ":" + (s < 10 ? "0"+s : s);
 }
 
-async function refresh(){
-    let now = await fetch('/now').then(r=>r.json());
-    let queue = await fetch('/queue').then(r=>r.json());
+socket.on("update", data => {
+    const now = data.current;
+    const queue = data.queue;
 
     let guild = Object.keys(now)[0];
 
@@ -143,7 +146,6 @@ async function refresh(){
     }
 
     let html = "";
-
     let q = queue[guild] || [];
 
     q.forEach((track, i) => {
@@ -160,7 +162,7 @@ async function refresh(){
     });
 
     document.getElementById("queue").innerHTML = html;
-}
+});
 
 async function control(action){
     await fetch("/"+action, {method:"POST"});
@@ -168,11 +170,8 @@ async function control(action){
 
 async function remove(i){
     await fetch("/queue/remove/"+i, {method:"POST"});
-    refresh();
 }
 
-setInterval(refresh, 2000);
-refresh();
 </script>
 
 </body>
