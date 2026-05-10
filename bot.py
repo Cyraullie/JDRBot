@@ -149,6 +149,10 @@ async def play_next(ctx):
     if ctx.voice_client is None:
         return
 
+    # évite double lancement
+    if ctx.voice_client.is_playing():
+        return
+
     queue = shared.queues.get(guild_id, [])
 
     if len(queue) == 0:
@@ -165,8 +169,8 @@ async def play_next(ctx):
 
     else:
 
-        # musique suivante
-        if shared.current.get(guild_id):
+        # musique suivante seulement si une musique joue déjà
+        if ctx.voice_client.is_playing() or ctx.voice_client.is_paused():
             shared.current_index[guild_id] += 1
 
         # fin queue
@@ -204,7 +208,8 @@ async def play_next(ctx):
             play_next(ctx),
             bot.loop
         )
-
+    if ctx.voice_client.is_playing():
+        return
     ctx.voice_client.play(source, after=after)
 
     shared.current[guild_id] = track
@@ -271,7 +276,7 @@ async def play(ctx, *, search):
         and not ctx.voice_client.is_paused()
         and not shared.current.get(guild_id)
     ):
-        shared.current_index[guild_id] = -1
+        shared.current_index[guild_id] = 0
         await play_next(ctx)
 
     await ctx.send(f"🎶 Ajouté : {track['title']}")
@@ -333,13 +338,13 @@ async def queue(ctx):
 
     msg = "🎶 Queue actuelle :\n\n"
 
-    current_track = shared.current.get(guild_id)
-
+    current = shared.current_index.get(guild_id, 0)
+    print(current)
     for i, track in enumerate(queue):
 
         playing = ""
 
-        if current_track and track["url"] == current_track["url"]:
+        if i == current:
             playing = "▶ "
 
         title = track["title"]
