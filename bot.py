@@ -281,6 +281,43 @@ async def status_loop():
 
         await asyncio.sleep(5)
 
+@bot.command()
+async def queue(ctx):
+    guild_id = ctx.guild.id
+
+    queue = shared.queues.get(guild_id, [])
+
+    if len(queue) == 0:
+        return await ctx.send("📭 Queue vide")
+
+    msg = "🎶 Queue actuelle :\n\n"
+
+    for i, track in enumerate(queue):
+        title = track["title"]
+
+        duration = track.get("duration", 0)
+        m, s = divmod(duration, 60)
+
+        msg += f"`{i}` • {title} ({m}:{s:02d})\n"
+
+    await ctx.send(msg[:2000])
+
+@bot.command()
+async def remove(ctx, index: int):
+    guild_id = ctx.guild.id
+
+    queue = shared.queues.get(guild_id, [])
+
+    if len(queue) == 0:
+        return await ctx.send("📭 Queue vide")
+
+    if index < 0 or index >= len(queue):
+        return await ctx.send("❌ Index invalide")
+
+    removed = queue.pop(index)
+
+    await ctx.send(f"🗑️ Supprimé : {removed['title']}")
+
 @bot.event
 async def on_ready():
     await bot.change_presence(activity=None)
