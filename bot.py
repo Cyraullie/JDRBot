@@ -240,65 +240,50 @@ async def play(ctx, *, search):
     loop = asyncio.get_running_loop()
 
     with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-        
-        if "list=" in search:
-            playlist_id = search.split("list=")[1].split("&")[0]
-            search = f"https://www.youtube.com/playlist?list={playlist_id}"
 
         info = await loop.run_in_executor(
             None,
             lambda: ydl.extract_info(search, download=False)
         )
 
-    # 🎯 PLAYLIST
-    if info.get("_type") == "playlist":
-        shared.queues.setdefault(guild_id, [])
+    shared.queues.setdefault(guild_id, [])
 
-        count = 0
+    # 🔥 CAS PLAYLIST
+    if info.get("_type") == "playlist" or "entries" in info and len(info["entries"]) > 1:
+
+        added = 0
 
         for entry in info["entries"]:
             if not entry:
                 continue
 
             shared.queues[guild_id].append({
-                "title": entry.get("title"),
+                "title": entry.get("title", "Unknown"),
                 "url": entry.get("webpage_url"),
                 "thumbnail": entry.get("thumbnail"),
                 "duration": entry.get("duration", 0)
             })
+            added += 1
 
-            count += 1
+        await ctx.send(f"📃 Playlist ajoutée : {added} musiques")
 
-        # init index si besoin
-        if guild_id not in shared.current_index:
-            shared.current_index[guild_id] = 0
+    else:
+        if "entries" in info:
+            info = info["entries"][0]
 
-        # start lecture si rien ne joue
-        if not ctx.voice_client.is_playing():
-            await play_next(ctx)
+        shared.queues[guild_id].append({
+            "title": info["title"],
+            "url": info.get("webpage_url") or search,
+            "thumbnail": info.get("thumbnail"),
+            "duration": info.get("duration", 0)
+        })
 
-        return await ctx.send(f"📃 Playlist ajoutée : {count} musiques")
+        await ctx.send(f"🎶 Ajouté : {info['title']}")
 
-    # 🎵 SINGLE TRACK
-    if "entries" in info:
-        info = info["entries"][0]
-
-    track = {
-        "title": info["title"],
-        "url": info.get("webpage_url") or search,
-        "thumbnail": info.get("thumbnail"),
-        "duration": info.get("duration", 0)
-    }
-
-    shared.queues.setdefault(guild_id, []).append(track)
-
-    if guild_id not in shared.current_index:
-        shared.current_index[guild_id] = 0
-
+    # ▶ start si rien joue
     if not ctx.voice_client.is_playing():
+        shared.current_index[guild_id] = 0
         await play_next(ctx)
-
-    await ctx.send(f"🎶 Ajouté : {track['title']}")
 
 
 # ⏭ skip
