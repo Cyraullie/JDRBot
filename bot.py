@@ -388,6 +388,33 @@ async def remove(ctx, index: int):
 
     await ctx.send(f"🗑️ Supprimé : {removed['title']}")
 
+@bot.command()
+async def leave(ctx):
+    if not ctx.voice_client:
+        return await ctx.send("❌ Je ne suis dans aucun salon vocal.")
+
+    guild_id = ctx.guild.id
+
+    # nettoyage
+    shared.current.pop(guild_id, None)
+    shared.timestamps.pop(guild_id, None)
+    shared.pause_offset.pop(guild_id, None)
+    shared.paused_at.pop(guild_id, None)
+    shared.queues.pop(guild_id, None)
+    shared.current_index.pop(guild_id, None)
+
+    if guild_id in disconnect_tasks:
+        disconnect_tasks[guild_id].cancel()
+        disconnect_tasks.pop(guild_id, None)
+
+    await ctx.voice_client.disconnect()
+
+    # reset du status si plus aucun vocal
+    if len(bot.voice_clients) <= 1:
+        await bot.change_presence(activity=None)
+
+    await ctx.send("👋 Déconnecté du salon vocal.")
+
 @bot.event
 async def on_ready():
     await bot.change_presence(activity=None)
