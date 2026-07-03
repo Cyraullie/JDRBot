@@ -28,7 +28,7 @@ shared.bot = bot
 YDL_OPTIONS = {
     "format": "bestaudio[ext=opus]/bestaudio/best",
     "quiet": True,
-    "noplaylist": True,
+    "noplaylist": False,
     "retries": 10,
     "extractor_retries": 5,
     "extractor_args": {
@@ -254,6 +254,33 @@ async def play(ctx, *, search):
             lambda: ydl.extract_info(search, download=False)
         )
 
+    shared.queues.setdefault(guild_id, [])
+
+    # 🎶 Playlist
+    if "entries" in info and info.get("_type") == "playlist":
+
+        count = 0
+
+        for entry in info["entries"]:
+
+            if not entry:
+                continue
+
+            track = {
+                "title": entry.get("title", "Titre inconnu"),
+                "url": entry.get("webpage_url"),
+                "thumbnail": entry.get("thumbnail"),
+                "duration": entry.get("duration", 0)
+            }
+
+            shared.queues[guild_id].append(track)
+            count += 1
+
+        await ctx.send(f"📃 Playlist ajoutée : {count} musiques")
+
+    # 🎵 Vidéo unique
+    else:
+
         if "entries" in info:
             info = info["entries"][0]
 
@@ -264,7 +291,9 @@ async def play(ctx, *, search):
             "duration": info.get("duration", 0)
         }
 
-    shared.queues.setdefault(guild_id, []).append(track)
+        shared.queues[guild_id].append(track)
+
+        await ctx.send(f"🎶 Ajouté : {track['title']}")
 
     # init index
     if guild_id not in shared.current_index:
