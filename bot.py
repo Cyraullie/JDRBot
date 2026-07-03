@@ -146,7 +146,12 @@ async def on_voice_state_update(member, before, after):
 async def play_next(ctx):
     guild_id = ctx.guild.id
 
-    if ctx.voice_client is None:
+    vc = ctx.voice_client
+    if vc is None:
+        return
+
+    # ❌ sécurité anti double play
+    if vc.is_playing() or vc.is_paused():
         return
 
     queue = shared.queues.get(guild_id, [])
@@ -159,12 +164,13 @@ async def play_next(ctx):
     if guild_id not in shared.current_index:
         shared.current_index[guild_id] = 0
 
-    # 🔁 LOOP SONG
+    # 🔁 SONG LOOP
     if shared.loop["song"] and shared.current.get(guild_id):
         track = shared.current[guild_id]
 
     else:
-        # avancer index UNE SEULE FOIS ici
+
+        # avancer index UNE seule fois ici
         shared.current_index[guild_id] += 1
 
         # si dépasse queue
@@ -178,7 +184,7 @@ async def play_next(ctx):
 
         track = queue[shared.current_index[guild_id]]
 
-    # 🎧 STREAM
+    # 🎧 STREAM (yt-dlp safe thread)
     loop = asyncio.get_running_loop()
 
     with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
@@ -200,12 +206,9 @@ async def play_next(ctx):
 
         asyncio.run_coroutine_threadsafe(play_next(ctx), bot.loop)
 
-    # ❌ SUPPRIME CE BLOC (important)
-    # if ctx.voice_client.is_playing():
-    #     return
+    vc.play(source, after=after)
 
-    ctx.voice_client.play(source, after=after)
-
+    # 📌 update state
     shared.current[guild_id] = track
     shared.timestamps[guild_id] = time.time()
     shared.pause_offset[guild_id] = 0
